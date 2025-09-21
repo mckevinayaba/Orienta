@@ -620,87 +620,121 @@ async def seed_institutions():
 
 async def seed_programmes():
     """Seed programmes data"""
-    institutions = await db.institutions.find().to_list(length=None)
-    
-    programmes = []
-    for institution in institutions:
-        if "Wits" in institution["name"]:
-            programmes.extend([
-                {
-                    "id": str(uuid.uuid4()),
-                    "institution_id": institution["id"],
-                    "title": "Bachelor of Engineering in Electrical Engineering",
-                    "faculty": "Engineering",
-                    "qualification_type": "Bachelor's Degree",
-                    "province": institution["province"],
-                    "city": institution["city"],
-                    "duration_months": 48,
-                    "total_estimated_cost": 280000.0,
-                    "entry_requirements": {
-                        "aps_min": 38,
-                        "subject_minima": {
-                            "Mathematics": 6,
-                            "Physical Sciences": 5,
-                            "English": 4
-                        }
+    try:
+        institutions = await db.institutions.find().to_list(length=None)
+        logging.info(f"Found {len(institutions)} institutions for programme seeding")
+        
+        programmes = []
+        for institution in institutions:
+            if "Witwatersrand" in institution["name"] or "Wits" in institution["name"]:
+                programmes.extend([
+                    {
+                        "id": str(uuid.uuid4()),
+                        "institution_id": institution["id"],
+                        "title": "Bachelor of Engineering in Electrical Engineering",
+                        "faculty": "Engineering",
+                        "qualification_type": "Bachelor's Degree",
+                        "province": institution["province"],
+                        "city": institution["city"],
+                        "duration_months": 48,
+                        "total_estimated_cost": 280000.0,
+                        "entry_requirements": {
+                            "aps_min": 38,
+                            "subject_minima": {
+                                "Mathematics": 6,
+                                "Physical Sciences": 5,
+                                "English": 4
+                            }
+                        },
+                        "source_url": "https://www.wits.ac.za/engineering",
+                        "last_verified_at": datetime.now(timezone.utc),
+                        "visible": True,
+                        "created_at": datetime.now(timezone.utc)
                     },
-                    "source_url": "https://www.wits.ac.za/engineering",
-                    "last_verified_at": datetime.now(timezone.utc),
-                    "visible": True,
-                    "created_at": datetime.now(timezone.utc)
+                    {
+                        "id": str(uuid.uuid4()),
+                        "institution_id": institution["id"],
+                        "title": "Bachelor of Commerce in Accounting",
+                        "faculty": "Commerce",
+                        "qualification_type": "Bachelor's Degree",
+                        "province": institution["province"],
+                        "city": institution["city"],
+                        "duration_months": 36,
+                        "total_estimated_cost": 210000.0,
+                        "entry_requirements": {
+                            "aps_min": 32,
+                            "subject_minima": {
+                                "Mathematics": 5,
+                                "English": 4,
+                                "Accounting": 5
+                            }
+                        },
+                        "source_url": "https://www.wits.ac.za/commerce",
+                        "last_verified_at": datetime.now(timezone.utc),
+                        "visible": True,
+                        "created_at": datetime.now(timezone.utc)
+                    }
+                ])
+            elif "Johannesburg" in institution["name"]:
+                programmes.extend([
+                    {
+                        "id": str(uuid.uuid4()),
+                        "institution_id": institution["id"],
+                        "title": "Bachelor of Education in Foundation Phase",
+                        "faculty": "Education",
+                        "qualification_type": "Bachelor's Degree",
+                        "province": institution["province"],
+                        "city": institution["city"],
+                        "duration_months": 48,
+                        "total_estimated_cost": 160000.0,
+                        "entry_requirements": {
+                            "aps_min": 26,
+                            "subject_minima": {
+                                "English": 4,
+                                "Mathematics": 3
+                            }
+                        },
+                        "source_url": "https://www.uj.ac.za/education",
+                        "last_verified_at": datetime.now(timezone.utc),
+                        "visible": True,
+                        "created_at": datetime.now(timezone.utc)
+                    }
+                ])
+        
+        # Add at least one generic programme if none matched
+        if not programmes and institutions:
+            programmes.append({
+                "id": str(uuid.uuid4()),
+                "institution_id": institutions[0]["id"],
+                "title": "Bachelor of Science in Computer Science",
+                "faculty": "Science",
+                "qualification_type": "Bachelor's Degree",
+                "province": institutions[0]["province"],
+                "city": institutions[0]["city"],
+                "duration_months": 36,
+                "total_estimated_cost": 180000.0,
+                "entry_requirements": {
+                    "aps_min": 30,
+                    "subject_minima": {
+                        "Mathematics": 5,
+                        "English": 4
+                    }
                 },
-                {
-                    "id": str(uuid.uuid4()),
-                    "institution_id": institution["id"],
-                    "title": "Bachelor of Commerce in Accounting",
-                    "faculty": "Commerce",
-                    "qualification_type": "Bachelor's Degree",
-                    "province": institution["province"],
-                    "city": institution["city"],
-                    "duration_months": 36,
-                    "total_estimated_cost": 210000.0,
-                    "entry_requirements": {
-                        "aps_min": 32,
-                        "subject_minima": {
-                            "Mathematics": 5,
-                            "English": 4,
-                            "Accounting": 5
-                        }
-                    },
-                    "source_url": "https://www.wits.ac.za/commerce",
-                    "last_verified_at": datetime.now(timezone.utc),
-                    "visible": True,
-                    "created_at": datetime.now(timezone.utc)
-                }
-            ])
-        elif "UJ" in institution["name"]:
-            programmes.extend([
-                {
-                    "id": str(uuid.uuid4()),
-                    "institution_id": institution["id"],
-                    "title": "Bachelor of Education in Foundation Phase",
-                    "faculty": "Education",
-                    "qualification_type": "Bachelor's Degree",
-                    "province": institution["province"],
-                    "city": institution["city"],
-                    "duration_months": 48,
-                    "total_estimated_cost": 160000.0,
-                    "entry_requirements": {
-                        "aps_min": 26,
-                        "subject_minima": {
-                            "English": 4,
-                            "Mathematics": 3
-                        }
-                    },
-                    "source_url": "https://www.uj.ac.za/education",
-                    "last_verified_at": datetime.now(timezone.utc),
-                    "visible": True,
-                    "created_at": datetime.now(timezone.utc)
-                }
-            ])
+                "source_url": "https://www.example.ac.za/computer-science",
+                "last_verified_at": datetime.now(timezone.utc),
+                "visible": True,
+                "created_at": datetime.now(timezone.utc)
+            })
+        
+        if programmes:
+            await db.programmes.insert_many(programmes)
+            logging.info(f"Seeded {len(programmes)} programmes")
+        else:
+            logging.warning("No programmes to seed")
     
-    if programmes:
-        await db.programmes.insert_many(programmes)
+    except Exception as e:
+        logging.error(f"Error seeding programmes: {str(e)}")
+        raise
 
 async def seed_funding_options():
     """Seed funding options data"""

@@ -530,15 +530,32 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup_db_seed():
     """Seed database with initial data"""
-    # Check if institutions exist
-    if await db.institutions.count_documents({}) == 0:
-        await seed_institutions()
-    
-    if await db.programmes.count_documents({}) == 0:
-        await seed_programmes()
-    
-    if await db.funding_options.count_documents({}) == 0:
-        await seed_funding_options()
+    try:
+        # Check if institutions exist
+        if await db.institutions.count_documents({}) == 0:
+            logging.info("Seeding institutions...")
+            await seed_institutions()
+            logging.info("Institutions seeded successfully")
+        
+        if await db.programmes.count_documents({}) == 0:
+            logging.info("Seeding programmes...")
+            await seed_programmes()
+            logging.info("Programmes seeded successfully")
+        
+        if await db.funding_options.count_documents({}) == 0:
+            logging.info("Seeding funding options...")
+            await seed_funding_options()
+            logging.info("Funding options seeded successfully")
+            
+        # Log counts
+        inst_count = await db.institutions.count_documents({})
+        prog_count = await db.programmes.count_documents({})
+        fund_count = await db.funding_options.count_documents({})
+        logging.info(f"Database seeded: {inst_count} institutions, {prog_count} programmes, {fund_count} funding options")
+        
+    except Exception as e:
+        logging.error(f"Database seeding error: {str(e)}")
+        raise
 
 async def seed_institutions():
     """Seed institutions data"""

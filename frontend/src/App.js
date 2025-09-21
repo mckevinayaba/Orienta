@@ -597,16 +597,49 @@ function App() {
 const AppRoutes = () => {
   const { user } = useAuth();
   
-  // Check for payment success
+  // Check for payment success from both Paystack and Stripe
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('session_id');
-    if (sessionId) {
-      toast.success('Payment successful! Your access has been unlocked.');
-      // Clear the URL parameter
+    const sessionId = urlParams.get('session_id'); // Stripe
+    const paymentRef = urlParams.get('payment_ref'); // Paystack
+    const reference = urlParams.get('reference'); // Paystack alternative
+    
+    if (sessionId || paymentRef || reference) {
+      const ref = sessionId || paymentRef || reference;
+      
+      // Verify payment if user is logged in
+      if (user) {
+        verifyPayment(ref);
+      } else {
+        toast.success('Payment processed! Please log in to access your content.');
+      }
+      
+      // Clear URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, []);
+  }, [user]);
+  
+  const verifyPayment = async (reference) => {
+    try {
+      const response = await axios.get(`${API}/payments/verify/${reference}`);
+      if (response.data.status === 'success' || response.data.status === 'paid') {
+        toast.success('Payment successful! Your access has been unlocked.');
+        
+        // Clear pending payment from localStorage
+        localStorage.removeItem('pending_payment');
+        
+        // Redirect to pathways
+        setTimeout(() => {
+          window.location.href = '/pathways';
+        }, 1500);
+      } else {
+        toast.error('Payment verification failed. Please contact support.');
+      }
+    } catch (error) {
+      console.error('Payment verification error:', error);
+      toast.error('Unable to verify payment. Please contact support.');
+    }
+  };
   
   if (user) {
     return <Navigate to="/dashboard" replace />;

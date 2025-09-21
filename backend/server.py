@@ -442,16 +442,26 @@ async def get_pathway_preview(current_user: User = Depends(get_current_user)):
         "message": "This is a preview. Unlock full pathway matching for R79."
     }
 
-# Payment routes will be added here
+# Payment configuration
+PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY')
+
+# Payment gateway models
+class PaymentGateway(str):
+    PAYSTACK = "paystack"
+    STRIPE = "stripe"
+
+class PaymentCreateRequest(BaseModel):
+    plan_type: str  # "learner" or "premium"
+    gateway: str = PaymentGateway.PAYSTACK  # Default to Paystack for South Africa
+    callback_url: Optional[str] = None
+
 @api_router.post("/payments/create-checkout")
 async def create_checkout_session(
     request: Request,
-    plan_type: str,  # "learner" or "premium"
+    payment_data: PaymentCreateRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Create Stripe checkout session"""
-    if not STRIPE_API_KEY:
-        raise HTTPException(status_code=500, detail="Payment system not configured")
+    """Create checkout session with Paystack or Stripe"""
     
     # Check if user already has paid access
     existing_payment = await db.payment_transactions.find_one({
@@ -467,13 +477,94 @@ async def create_checkout_session(
         "premium": {"amount": 129.0, "currency": "ZAR"}
     }
     
-    if plan_type not in plans:
+    if payment_data.plan_type not in plans:
         raise HTTPException(status_code=400, detail="Invalid plan type")
     
-    plan = plans[plan_type]
+    plan = plans[payment_data.plan_type]
     
     # Get origin from request
     origin = str(request.base_url).rstrip('/')
+    
+    try:
+        if payment_data.gateway == PaymentGateway.PAYSTACK:
+            return await create_paystack_payment(current_user, plan, payment_data.plan_type, origin)
+        elif payment_data.gateway == PaymentGateway.STRIPE:
+            return await create_stripe_payment(current_user, plan, payment_data.plan_type, origin)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid payment gateway")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Payment creation error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create payment session")
+
+async def create_paystack_payment(user: User, plan: dict, plan_type: str, origin: str):
+    """Create Paystack payment"""
+    if not PAYSTACK_SECRET_KEY:
+        raise HTTPException(status_code=500, detail="Paystack not configured")
+    
+    from paystackapi.transaction import Transaction
+    
+    # Generate reference
+    reference = f"orienta_{user.id}_{int(datetime.now(timezone.utc).timestamp())}"
+    
+    try:
+        # Initialize Paystack transaction
+        response = Transaction.initialize(
+            reference=reference,
+            amount=int(plan["amount"] * 100),  # Convert to cents
+            email=user.email,
+            currency=plan["currency"],
+            callback_url=f"{origin}/?payment_ref={reference}",
+            metadata={
+                "user_id": user.id,
+                "plan_type": plan_type,
+                "integration": "orienta"
+            }
+        )
+        
+        if response.get('status'):
+            data = response.get('data', {})
+            
+            # Create payment transaction record
+            transaction = PaymentTransaction(
+                user_id=user.id,
+                provider="paystack",
+                amount_cents=int(plan["amount"] * 100),
+                currency=plan["currency"],
+                status="initiated",
+                external_ref=reference,
+                plan_type=plan_type
+            )
+            
+            await db.payment_transactions.insert_one(transaction.dict())
+            await log_event("payment_initiated", {
+                "user_id": user.id,
+                "provider": "paystack",
+                "amount": plan["amount"],
+                "reference": reference
+            })
+            
+            return {
+                "checkout_url": data.get('authorization_url'),
+                "reference": reference,
+                "access_code": data.get('access_code'),
+                "gateway": "paystack"
+            }
+        else:
+            error_msg = response.get('message', 'Paystack initialization failed')
+            logging.error(f"Paystack error: {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+            
+    except Exception as e:
+        logging.error(f"Paystack payment creation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Paystack error: {str(e)}")
+
+async def create_stripe_payment(user: User, plan: dict, plan_type: str, origin: str):
+    """Create Stripe payment"""
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
     
     try:
         # Initialize Stripe checkout
@@ -487,7 +578,7 @@ async def create_checkout_session(
             success_url=f"{origin}/?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{origin}/",
             metadata={
-                "user_id": current_user.id,
+                "user_id": user.id,
                 "plan_type": plan_type
             }
         )
@@ -496,7 +587,7 @@ async def create_checkout_session(
         
         # Create payment transaction record
         transaction = PaymentTransaction(
-            user_id=current_user.id,
+            user_id=user.id,
             provider="stripe",
             amount_cents=int(plan["amount"] * 100),
             currency=plan["currency"],
@@ -506,12 +597,196 @@ async def create_checkout_session(
         )
         
         await db.payment_transactions.insert_one(transaction.dict())
+        await log_event("payment_initiated", {
+            "user_id": user.id,
+            "provider": "stripe",
+            "amount": plan["amount"],
+            "session_id": session.session_id
+        })
         
-        return {"checkout_url": session.url, "session_id": session.session_id}
+        return {
+            "checkout_url": session.url,
+            "session_id": session.session_id,
+            "gateway": "stripe"
+        }
         
     except Exception as e:
-        logging.error(f"Payment creation error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to create payment session")
+        logging.error(f"Stripe payment creation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+
+@api_router.get("/payments/verify/{reference}")
+async def verify_payment(
+    reference: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Verify payment status"""
+    
+    # Find transaction in database
+    transaction = await db.payment_transactions.find_one({
+        "external_ref": reference,
+        "user_id": current_user.id
+    })
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    try:
+        if transaction["provider"] == "paystack":
+            return await verify_paystack_payment(reference, transaction)
+        elif transaction["provider"] == "stripe":
+            return await verify_stripe_payment(reference, transaction)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid payment provider")
+            
+    except Exception as e:
+        logging.error(f"Payment verification error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Payment verification failed")
+
+async def verify_paystack_payment(reference: str, transaction: dict):
+    """Verify Paystack payment"""
+    import requests
+    
+    headers = {
+        "Authorization": f"Bearer {PAYSTACK_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.get(
+        f"https://api.paystack.co/transaction/verify/{reference}",
+        headers=headers
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        if data.get('status'):
+            transaction_data = data.get('data', {})
+            status = transaction_data.get('status')
+            
+            # Update transaction status if needed
+            if status == 'success' and transaction["status"] != "succeeded":
+                await db.payment_transactions.update_one(
+                    {"external_ref": reference},
+                    {"$set": {"status": "succeeded", "updated_at": datetime.now(timezone.utc)}}
+                )
+                await log_event("payment_success", {
+                    "user_id": transaction["user_id"],
+                    "provider": "paystack",
+                    "reference": reference
+                })
+            
+            return {
+                "status": status,
+                "amount": transaction_data.get('amount', 0) / 100,  # Convert from cents
+                "currency": transaction_data.get('currency'),
+                "reference": reference,
+                "gateway": "paystack",
+                "paid_at": transaction_data.get('paid_at')
+            }
+        else:
+            raise HTTPException(status_code=400, detail=data.get('message', 'Verification failed'))
+    else:
+        raise HTTPException(status_code=response.status_code, detail="Paystack API error")
+
+async def verify_stripe_payment(session_id: str, transaction: dict):
+    """Verify Stripe payment"""
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url="")
+    
+    try:
+        checkout_status = await stripe_checkout.get_checkout_status(session_id)
+        
+        # Update transaction status if needed  
+        if checkout_status.payment_status == 'paid' and transaction["status"] != "succeeded":
+            await db.payment_transactions.update_one(
+                {"external_ref": session_id},
+                {"$set": {"status": "succeeded", "updated_at": datetime.now(timezone.utc)}}
+            )
+            await log_event("payment_success", {
+                "user_id": transaction["user_id"],
+                "provider": "stripe",
+                "session_id": session_id
+            })
+        
+        return {
+            "status": checkout_status.payment_status,
+            "amount": checkout_status.amount_total / 100,
+            "currency": checkout_status.currency,
+            "reference": session_id,
+            "gateway": "stripe"
+        }
+        
+    except Exception as e:
+        logging.error(f"Stripe verification error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Stripe verification failed: {str(e)}")
+
+@api_router.post("/webhook/paystack")
+async def paystack_webhook(request: Request):
+    """Handle Paystack webhook events"""
+    try:
+        payload = await request.body()
+        
+        # Parse webhook payload
+        try:
+            event_data = json.loads(payload)
+        except json.JSONDecodeError:
+            logging.error("Invalid JSON in Paystack webhook payload")
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        
+        event_type = event_data.get('event')
+        transaction_data = event_data.get('data', {})
+        
+        if event_type == 'charge.success':
+            await process_paystack_success(transaction_data)
+        elif event_type == 'charge.failed':
+            await process_paystack_failure(transaction_data)
+        
+        return {"status": "success"}
+        
+    except Exception as e:
+        logging.error(f"Paystack webhook error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+async def process_paystack_success(transaction_data: dict):
+    """Process successful Paystack payment"""
+    reference = transaction_data.get('reference')
+    
+    # Update payment status
+    await db.payment_transactions.update_one(
+        {"external_ref": reference},
+        {"$set": {"status": "succeeded", "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    await log_event("payment_webhook_success", {
+        "provider": "paystack",
+        "reference": reference
+    })
+
+async def process_paystack_failure(transaction_data: dict):
+    """Process failed Paystack payment"""
+    reference = transaction_data.get('reference')
+    
+    # Update payment status
+    await db.payment_transactions.update_one(
+        {"external_ref": reference},
+        {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    await log_event("payment_webhook_failure", {
+        "provider": "paystack", 
+        "reference": reference
+    })
+
+@api_router.get("/payments/status")
+async def check_payment_status(current_user: User = Depends(get_current_user)):
+    """Check if user has paid access"""
+    payment = await db.payment_transactions.find_one({
+        "user_id": current_user.id,
+        "status": "succeeded"
+    })
+    
+    return {
+        "has_paid_access": payment is not None,
+        "payment": PaymentTransaction(**payment) if payment else None
+    }
 
 # Include the router in the main app
 app.include_router(api_router)

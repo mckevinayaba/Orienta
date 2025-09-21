@@ -52,6 +52,12 @@ const AuthProvider = ({ children }) => {
       localStorage.setItem('token', access_token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       setUser(user);
+      
+      // Force navigation to dashboard
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 100);
+      
       return { success: true };
     } catch (error) {
       return { success: false, error: error.response?.data?.detail || 'Login failed' };
@@ -65,6 +71,12 @@ const AuthProvider = ({ children }) => {
       localStorage.setItem('token', access_token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       setUser(user);
+      
+      // Force navigation to dashboard
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 100);
+      
       return { success: true };
     } catch (error) {
       return { success: false, error: error.response?.data?.detail || 'Registration failed' };

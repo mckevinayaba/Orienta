@@ -875,20 +875,47 @@ const PathwaysPage = () => {
                   Unlock your full pathway analysis with 3 personalized options, funding recommendations, and a 90-day action plan.
                 </p>
                 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <Button 
-                    onClick={() => handlePayment('learner')}
-                    className="w-full"
-                  >
-                    Unlock for R79
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    onClick={() => handlePayment('premium')}
-                    className="w-full"
-                  >
-                    Premium R129
-                  </Button>
+                <div className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <Button 
+                      onClick={() => handlePayment('learner', 'paystack')}
+                      className="w-full bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700"
+                    >
+                      Pay with Paystack R79
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => handlePayment('premium', 'paystack')}
+                      className="w-full border-green-600 text-green-600 hover:bg-green-50"
+                    >
+                      Premium R129
+                    </Button>
+                  </div>
+                  
+                  <div className="text-center">
+                    <div className="relative">
+                      <Separator className="my-4" />
+                      <span className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-amber-50 px-3 text-sm text-gray-500">
+                        or pay with
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <Button 
+                      onClick={() => handlePayment('learner', 'stripe')}
+                      className="w-full bg-purple-600 hover:bg-purple-700"
+                    >
+                      Pay with Stripe R79
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => handlePayment('premium', 'stripe')}
+                      className="w-full border-purple-600 text-purple-600 hover:bg-purple-50"
+                    >
+                      Premium R129 (Stripe)
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>

@@ -420,12 +420,16 @@ async def get_pathway_preview(current_user: User = Depends(get_current_user)):
     if current_user.role != UserRole.LEARNER:
         raise HTTPException(status_code=403, detail="Only learners can view pathways")
     
-    profile = await db.learner_profiles.find_one({"user_id": current_user.id})
-    if not profile or not profile.get("intake_completed"):
-        raise HTTPException(status_code=400, detail="Complete intake first")
-    
+    # For preview, allow access even without completed intake
     # Get one sample programme
     sample_programme = await db.programmes.find_one({"visible": True})
+    if not sample_programme:
+        # Force re-seed if no programmes
+        logging.warning("No programmes found, re-seeding database...")
+        await seed_institutions()
+        await seed_programmes() 
+        sample_programme = await db.programmes.find_one({"visible": True})
+        
     if not sample_programme:
         raise HTTPException(status_code=404, detail="No programmes available")
     

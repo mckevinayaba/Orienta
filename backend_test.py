@@ -331,9 +331,41 @@ def main():
         print("❌ Failed to get pathways preview")
         return 1
     
-    print("\n💳 Phase 5: Payment Tests")
-    if not tester.test_payment_creation():
-        print("❌ Failed to create payment session")
+    print("\n💳 Phase 5: Dual Payment Integration Tests")
+    
+    # Test payment status first
+    if not tester.test_payment_status():
+        print("❌ Failed to check payment status")
+        return 1
+    
+    # Test Paystack payments
+    print("\n💰 Testing Paystack Integration:")
+    paystack_success, paystack_ref = tester.test_payment_creation_paystack()
+    if not paystack_success:
+        print("❌ Failed to create Paystack payment session")
+        return 1
+    
+    paystack_premium_success, _ = tester.test_payment_creation_paystack_premium()
+    if not paystack_premium_success:
+        print("❌ Failed to create Paystack premium payment session")
+        return 1
+    
+    # Test Stripe payments
+    print("\n💳 Testing Stripe Integration:")
+    stripe_success, stripe_ref = tester.test_payment_creation_stripe()
+    if not stripe_success:
+        print("❌ Failed to create Stripe payment session")
+        return 1
+    
+    stripe_premium_success, _ = tester.test_payment_creation_stripe_premium()
+    if not stripe_premium_success:
+        print("❌ Failed to create Stripe premium payment session")
+        return 1
+    
+    # Test payment verification endpoints
+    print("\n🔍 Testing Payment Verification:")
+    if not tester.test_payment_verification_mock(paystack_ref):
+        print("❌ Failed payment verification test")
         return 1
     
     # Print final results

@@ -341,24 +341,60 @@ async def update_profile_from_intake(user_id: str, responses: List[IntakeRespons
     }
     
     for response in responses:
+        # Parse JSON strings if needed
+        answer = response.answer
+        if isinstance(answer, str):
+            try:
+                answer = json.loads(answer)
+            except (json.JSONDecodeError, TypeError):
+                # If it's not JSON, keep as string
+                pass
+        
         if response.question_id == "grade":
-            profile_updates["grade_level"] = response.answer
+            # Convert "Grade 12" to 12, "Grade 11" to 11, etc.
+            if isinstance(answer, str):
+                if "12" in answer:
+                    profile_updates["grade_level"] = 12
+                elif "11" in answer:
+                    profile_updates["grade_level"] = 11
+                else:
+                    profile_updates["grade_level"] = 12  # Default
+            else:
+                profile_updates["grade_level"] = answer
+                
         elif response.question_id == "province":
-            profile_updates["province"] = response.answer
+            profile_updates["province"] = answer
+            
         elif response.question_id == "subjects":
-            profile_updates["subjects"] = response.answer
+            # Ensure subjects is a list
+            if isinstance(answer, list):
+                profile_updates["subjects"] = answer
+            else:
+                profile_updates["subjects"] = [answer] if answer else []
+                
         elif response.question_id == "interests":
-            profile_updates["interest_tags"] = response.answer
+            # Ensure interest_tags is a list
+            if isinstance(answer, list):
+                profile_updates["interest_tags"] = answer
+            else:
+                profile_updates["interest_tags"] = [answer] if answer else []
+                
         elif response.question_id == "budget":
             if "constraints" not in profile_updates:
                 profile_updates["constraints"] = {}
-            profile_updates["constraints"]["fees_band"] = response.answer
+            profile_updates["constraints"]["fees_band"] = answer
+            
         elif response.question_id == "location":
             if "constraints" not in profile_updates:
                 profile_updates["constraints"] = {}
-            profile_updates["constraints"]["distance_km"] = response.answer
+            profile_updates["constraints"]["distance_km"] = answer
+            
         elif response.question_id == "fields":
-            profile_updates["target_fields"] = response.answer
+            # Ensure target_fields is a list
+            if isinstance(answer, list):
+                profile_updates["target_fields"] = answer
+            else:
+                profile_updates["target_fields"] = [answer] if answer else []
     
     await db.learner_profiles.update_one(
         {"user_id": user_id},

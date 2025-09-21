@@ -801,13 +801,21 @@ const PathwaysPage = () => {
     }
   };
 
-  const handlePayment = async (planType) => {
+  const handlePayment = async (planType, gateway = 'paystack') => {
     try {
-      const response = await axios.post(`${API}/payments/create-checkout`, null, {
-        params: { plan_type: planType }
+      const response = await axios.post(`${API}/payments/create-checkout`, {
+        plan_type: planType,
+        gateway: gateway
       });
       
       if (response.data.checkout_url) {
+        // Store payment info for verification
+        localStorage.setItem('pending_payment', JSON.stringify({
+          reference: response.data.reference || response.data.session_id,
+          gateway: response.data.gateway,
+          plan_type: planType
+        }));
+        
         window.location.href = response.data.checkout_url;
       }
     } catch (error) {

@@ -267,9 +267,10 @@ async def start_intake(current_user: User = Depends(get_current_user)):
     # Check for existing session
     session = await db.intake_sessions.find_one({"user_id": current_user.id, "completed": False})
     if not session:
-        session = IntakeSession(user_id=current_user.id)
-        await db.intake_sessions.insert_one(session.dict())
+        session_obj = IntakeSession(user_id=current_user.id)
+        await db.intake_sessions.insert_one(session_obj.dict())
         await log_event("intake_started", {"user_id": current_user.id})
+        return session_obj
     
     return IntakeSession(**session)
 
